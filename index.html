@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circle of Fifths — MIDI Visualizer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #f5f0e8;
+    --surface: #ede8dc;
+    --border: #d6cebc;
+    --text: #2c2820;
+    --muted: #8c8070;
+    --accent-light: #ecddd1;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    padding: 0.9rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 1.2rem;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Lora', serif;
+    font-weight: 400;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+
+  header h1 em {
+    font-style: italic;
+    color: #b85c2a;
+  }
+
+  #status {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #status.connected { color: #5a7a4a; }
+  #status.error { color: #c0392b; }
+
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .left-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    border-right: 1px solid var(--border);
+  }
+
+  canvas { display: block; }
+
+  .left-footer {
+    margin-top: 0.9rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  #note-display {
+    font-family: 'Lora', serif;
+    font-size: 1.5rem;
+    font-weight: 600;
+    min-height: 2rem;
+    text-align: center;
+    transition: color 0.2s;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.4rem 1.1rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-radius: 2px;
+  }
+
+  button:hover {
+    border-color: currentColor;
+    opacity: 0.8;
+  }
+
+  #newBtn {
+    border-color: var(--border);
+    color: var(--muted);
+  }
+
+  /* Sequence legend dots */
+  #seq-legend {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    min-height: 1.2rem;
+  }
+
+  .seq-pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    opacity: 0.5;
+    transition: opacity 0.2s, transform 0.2s;
+    cursor: pointer;
+  }
+  .seq-pip.active {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+
+  /* Right panel */
+  .right-panel {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 1.2rem 1rem;
+    overflow: hidden;
+  }
+
+  .right-panel h2 {
+    font-family: 'Lora', serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 0.8rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+
+  #note-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+
+  #note-list::-webkit-scrollbar { width: 3px; }
+  #note-list::-webkit-scrollbar-track { background: transparent; }
+  #note-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .seq-header {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 0.5rem 0.4rem 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.3rem;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+
+  .seq-header:hover {
+    background: rgba(0,0,0,0.04);
+  }
+
+  .seq-header:first-child { margin-top: 0; }
+
+  .seq-header-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .note-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.3rem 0.4rem;
+    border-radius: 2px;
+    animation: slideIn 0.18s ease;
+    transition: opacity 0.25s;
+  }
+
+  .note-entry.latest {
+    background: rgba(0,0,0,0.04);
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(8px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  .note-num {
+    font-size: 0.58rem;
+    color: var(--muted);
+    width: 1.6rem;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .note-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .note-name-entry {
+    font-family: 'Lora', serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .note-empty {
+    font-size: 0.72rem;
+    color: var(--muted);
+    font-style: italic;
+    padding: 0.4rem;
+    font-family: 'Lora', serif;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Circle of <em>Fifths</em> — MIDI Visualizer</h1>
+  <div id="status">Requesting MIDI access…</div>
+</header>
+
+<div class="main">
+  <div class="left-panel">
+    <canvas id="c"></canvas>
+    <div class="left-footer">
+      <div id="note-display"></div>
+      <div id="seq-legend"></div>
+      <div class="btn-row">
+        <button id="newBtn">New Phrase</button>
+        <button id="exportBtn">Export</button>
+        <button id="clearBtn">Clear All</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <h2>Notes played</h2>
+    <div id="note-list">
+      <div class="note-empty" id="empty-msg">Play a note to begin…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const FIFTHS = ['C','G','D','A','E','B','F#/Gb','Db','Ab','Eb','Bb','F'];
+function midiToPC(midi) { return midi % 12; }
+const PC_TO_FIFTH_IDX = [0,7,2,9,4,11,6,1,8,3,10,5];
+
+// Warm, earthy palette — harmonious with the cream background
+const SEQUENCE_COLORS = [
+  '#b85c2a', // terracotta (original)
+  '#4a7c6f', // sage green
+  '#7059a6', // dusty purple
+  '#c4882a', // amber
+  '#2a6b8c', // slate blue
+  '#a64a6a', // rose
+  '#5a7a3a', // olive
+  '#8c5a2a', // umber
+];
+
+// --- State ---
+// Each sequence: { points: [...fifthIdx], color: '#...' }
+let sequences = [{ points: [], color: SEQUENCE_COLORS[0] }];
+let activeSeq = 0;
+let hoveredSeq = -1; // -1 means no hover
+let frozenSeq = -1;  // -1 means nothing frozen
+
+function currentColor() { return sequences[activeSeq].color; }
+function currentPoints() { return sequences[activeSeq].points; }
+
+// --- Canvas ---
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let SIZE, CX, CY, R_OUTER, R_LABEL, R_DOT;
+
+function initCanvas() {
+  const leftPanel = document.querySelector('.left-panel');
+  const footerH = 90;
+  const w = leftPanel.clientWidth - 40;
+  const h = leftPanel.clientHeight - footerH - 40;
+  SIZE = Math.max(180, Math.min(w, h));
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+  CX = SIZE / 2; CY = SIZE / 2;
+  R_OUTER = SIZE * 0.40;
+  R_LABEL = SIZE * 0.455;
+  R_DOT = Math.max(6, SIZE * 0.022);
+}
+
+initCanvas();
+
+function angleForIdx(i) { return (i / 12) * Math.PI * 2 - Math.PI / 2; }
+function posForIdx(i) {
+  const a = angleForIdx(i);
+  return { x: CX + R_OUTER * Math.cos(a), y: CY + R_OUTER * Math.sin(a) };
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return {r,g,b};
+}
+
+function draw() {
+  ctx.clearRect(0, 0, SIZE, SIZE);
+
+  // Circle fill
+  ctx.beginPath();
+  ctx.arc(CX, CY, R_OUTER, 0, Math.PI * 2);
+  ctx.fillStyle = '#ede8dc';
+  ctx.fill();
+  ctx.strokeStyle = '#c8bfac';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Spokes
+  for (let i = 0; i < 12; i++) {
+    const a = angleForIdx(i);
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(CX + R_OUTER * Math.cos(a), CY + R_OUTER * Math.sin(a));
+    ctx.strokeStyle = '#d6cebc';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Draw all sequences (oldest first, active last so it's on top)
+  const drawOrder = sequences.map((_,i) => i).filter(i => i !== activeSeq);
+  drawOrder.push(activeSeq);
+
+  for (const si of drawOrder) {
+    const seq = sequences[si];
+    const pts = seq.points;
+    const color = seq.color;
+    const {r,g,b} = hexToRgb(color);
+    const isActive = si === activeSeq;
+
+    // Determine alpha based on hover state
+    let alpha;
+    if (hoveredSeq === -1) {
+      // No hover: normal rendering
+      alpha = isActive ? 1 : 0.45;
+    } else if (si === hoveredSeq) {
+      // This sequence is hovered: full brightness
+      alpha = 1;
+    } else {
+      // Another sequence is hovered: fade everything else way down
+      alpha = 0.1;
+    }
+
+    // Lines
+    if (pts.length >= 2) {
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = posForIdx(pts[i]);
+        const bp = posForIdx(pts[i + 1]);
+        const progress = pts.length > 2 ? (i + 1) / (pts.length - 1) : 1;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(bp.x, bp.y);
+        ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * (0.25 + 0.65 * progress)})`;
+        ctx.lineWidth = (hoveredSeq === si) ? 3 : isActive ? 3 : 1;
+        ctx.stroke();
+      }
+    }
+
+    // Dots
+    const dotCounts = {};
+    for (const idx of pts) dotCounts[idx] = (dotCounts[idx] || 0) + 1;
+
+    for (const [idxStr, count] of Object.entries(dotCounts)) {
+      const idx = +idxStr;
+      const p = posForIdx(idx);
+      const dotR = R_DOT * (isActive ? 1 : 0.8);
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, dotR + 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha * 0.18})`;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, dotR, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.fill();
+
+      if (count > 1) {
+        ctx.font = `500 ${SIZE * 0.022}px 'DM Mono', monospace`;
+        ctx.fillStyle = '#f5f0e8';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(count, p.x, p.y);
+      }
+    }
+  }
+
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(CX, CY, SIZE * 0.09, 0, Math.PI * 2);
+  ctx.fillStyle = '#f5f0e8';
+  ctx.fill();
+  ctx.strokeStyle = '#c8bfac';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Labels — highlight notes from hovered sequence (or active if no hover)
+  const labelSeqIdx = hoveredSeq !== -1 ? hoveredSeq : activeSeq;
+  const labelPts = sequences[labelSeqIdx].points;
+  const labelColor = sequences[labelSeqIdx].color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < 12; i++) {
+    const a = angleForIdx(i);
+    const lx = CX + R_LABEL * Math.cos(a);
+    const ly = CY + R_LABEL * Math.sin(a);
+    const isActiveNote = labelPts.includes(i);
+    ctx.font = `${isActiveNote ? '600' : '400'} ${SIZE * 0.048}px 'Lora', serif`;
+    ctx.fillStyle = isActiveNote ? labelColor : (hoveredSeq !== -1 ? '#c8bfac' : '#8c8070');
+    ctx.fillText(FIFTHS[i], lx, ly);
+  }
+
+  // Center text
+  const totalNotes = currentPoints().length;
+  ctx.font = `italic 400 ${SIZE * 0.036}px 'Lora', serif`;
+  ctx.fillStyle = totalNotes === 0 ? '#c8bfac' : '#8c8070';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(
+    totalNotes === 0 ? 'play a note' : `${totalNotes} note${totalNotes !== 1 ? 's' : ''}`,
+    CX, CY
+  );
+}
+
+draw();
+
+// --- Legend pips ---
+function updateLegend() {
+  const legend = document.getElementById('seq-legend');
+  legend.innerHTML = '';
+  sequences.forEach((seq, i) => {
+    if (seq.points.length === 0 && i === activeSeq && sequences.length === 1) return;
+    const pip = document.createElement('div');
+    pip.className = 'seq-pip' + (i === activeSeq ? ' active' : '');
+    pip.style.background = seq.color;
+    pip.title = `Phrase ${i + 1}`;
+    pip.addEventListener('mouseenter', () => {
+      if (frozenSeq === -1) { hoveredSeq = i; draw(); syncListHover(); }
+    });
+    pip.addEventListener('mouseleave', () => {
+      if (frozenSeq === -1) { hoveredSeq = -1; draw(); syncListHover(); }
+    });
+    pip.addEventListener('click', () => {
+      frozenSeq = (frozenSeq === i) ? -1 : i;
+      hoveredSeq = frozenSeq;
+      draw(); syncListHover();
+    });
+    legend.appendChild(pip);
+  });
+
+  // Update note display color
+  document.getElementById('note-display').style.color = currentColor();
+  // Update New button color to hint at current color
+  document.getElementById('newBtn').style.borderColor = currentColor();
+  document.getElementById('newBtn').style.color = currentColor();
+}
+
+updateLegend();
+
+// --- Sync sidebar dim/highlight with hoveredSeq ---
+function syncListHover() {
+  const headers = noteList.querySelectorAll('.seq-header');
+  const entries = noteList.querySelectorAll('.note-entry');
+
+  headers.forEach(h => {
+    const si = parseInt(h.dataset.seq);
+    if (hoveredSeq === -1) {
+      h.style.opacity = '1';
+    } else {
+      h.style.opacity = si === hoveredSeq ? '1' : '0.2';
+    }
+  });
+
+  entries.forEach(e => {
+    const si = parseInt(e.dataset.seq);
+    if (hoveredSeq === -1) {
+      e.style.opacity = '1';
+    } else {
+      e.style.opacity = si === hoveredSeq ? '1' : '0.15';
+    }
+  });
+}
+
+// --- Note list ---
+const noteList = document.getElementById('note-list');
+const emptyMsg = document.getElementById('empty-msg');
+
+function addNoteToList(noteName, seqIndex) {
+  if (document.getElementById('empty-msg')) emptyMsg.remove();
+
+  // Remove latest highlight from previous entry
+  const prev = noteList.querySelector('.latest');
+  if (prev) prev.classList.remove('latest');
+
+  // If this is the first note of a new sequence, add a header
+  const seqPts = sequences[seqIndex].points;
+  if (seqPts.length === 1) {
+    const header = document.createElement('div');
+    header.className = 'seq-header';
+    header.dataset.seq = seqIndex;
+    const hdot = document.createElement('span');
+    hdot.className = 'seq-header-dot';
+    hdot.style.background = sequences[seqIndex].color;
+    const hlabel = document.createElement('span');
+    hlabel.textContent = `Phrase ${seqIndex + 1}`;
+    header.appendChild(hdot);
+    header.appendChild(hlabel);
+    // Hover/click on header highlights/freezes that phrase
+    header.addEventListener('mouseenter', () => {
+      if (frozenSeq === -1) { hoveredSeq = seqIndex; draw(); syncListHover(); }
+    });
+    header.addEventListener('mouseleave', () => {
+      if (frozenSeq === -1) { hoveredSeq = -1; draw(); syncListHover(); }
+    });
+    header.addEventListener('click', () => {
+      frozenSeq = (frozenSeq === seqIndex) ? -1 : seqIndex;
+      hoveredSeq = frozenSeq;
+      draw(); syncListHover();
+    });
+    noteList.appendChild(header);
+  }
+
+  const entry = document.createElement('div');
+  entry.className = 'note-entry latest';
+  entry.dataset.seq = seqIndex;
+
+  const num = document.createElement('span');
+  num.className = 'note-num';
+  num.textContent = seqPts.length;
+
+  const dot = document.createElement('span');
+  dot.className = 'note-dot';
+  dot.style.background = sequences[seqIndex].color;
+
+  const name = document.createElement('span');
+  name.className = 'note-name-entry';
+  name.textContent = noteName;
+
+  entry.appendChild(num);
+  entry.appendChild(dot);
+  entry.appendChild(name);
+  noteList.appendChild(entry);
+  entry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
+// --- New sequence ---
+document.getElementById('newBtn').addEventListener('click', () => {
+  // Don't add a new sequence if current one is empty
+  if (currentPoints().length === 0) return;
+
+  const nextColorIdx = sequences.length % SEQUENCE_COLORS.length;
+  sequences.push({ points: [], color: SEQUENCE_COLORS[nextColorIdx] });
+  activeSeq = sequences.length - 1;
+
+  document.getElementById('note-display').textContent = '';
+  updateLegend();
+  draw();
+});
+
+// --- Clear all ---
+document.getElementById('clearBtn').addEventListener('click', () => {
+  sequences = [{ points: [], color: SEQUENCE_COLORS[0] }];
+  activeSeq = 0;
+  hoveredSeq = -1;
+  frozenSeq = -1;
+  document.getElementById('note-display').textContent = '';
+  noteList.innerHTML = '';
+  noteList.appendChild(emptyMsg);
+  updateLegend();
+  draw();
+});
+
+// --- Export ---
+document.getElementById('exportBtn').addEventListener('click', () => {
+  // Fill cream background before export so PNG isn't transparent outside circle
+  const imageData = ctx.getImageData(0, 0, SIZE, SIZE);
+  ctx.fillStyle = '#f5f0e8';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.putImageData(imageData, 0, 0);
+  // Redraw cleanly with background
+  ctx.fillStyle = '#f5f0e8';
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  draw();
+  const link = document.createElement('a');
+  link.download = 'circle-of-fifths.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// --- Audio ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// --- Audio unlock overlay ---
+function showStartOverlay() {
+  const overlay = document.createElement('div');
+  overlay.id = 'start-overlay';
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(245,240,232,0.92);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; z-index: 998; cursor: pointer;
+    font-family: 'DM Mono', monospace;
+  `;
+  overlay.innerHTML = `
+    <p style="font-family:'Lora',serif; font-size:1.4rem; font-weight:400; color:#2c2820; margin-bottom:0.6rem;">
+      Circle of <em style="color:#b85c2a;">Fifths</em>
+    </p>
+    <p style="font-size:0.68rem; color:#8c8070; letter-spacing:0.15em; text-transform:uppercase;">
+      Click anywhere to begin
+    </p>
+  `;
+  overlay.addEventListener('click', () => {
+    audioCtx.resume().then(() => {
+      overlay.remove();
+    });
+  });
+  document.body.appendChild(overlay);
+}
+
+showStartOverlay();
+
+// Unlock audio context on any user interaction (required for MIDI which isn't a direct gesture)
+function unlockAudio() {
+  if (audioCtx.state !== 'running') {
+    audioCtx.resume();
+  }
+}
+document.addEventListener('click', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
+document.addEventListener('touchstart', unlockAudio);
+
+function playNote(fifthIdx) {
+  // If still suspended, try resuming and schedule note slightly ahead
+  const resumePromise = audioCtx.state !== 'running' ? audioCtx.resume() : Promise.resolve();
+
+  resumePromise.then(() => {
+    const PC_FROM_FIFTH = [0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10, 5];
+    const pc = PC_FROM_FIFTH[fifthIdx];
+    const midiNote = 60 + pc;
+    const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+    const now = audioCtx.currentTime;
+
+    // Layer 1: triangle slightly flat — body
+    const osc1 = audioCtx.createOscillator();
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(freq, now);
+    osc1.detune.setValueAtTime(-8, now);
+
+    // Layer 2: triangle slightly sharp — chorus
+    const osc2 = audioCtx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq, now);
+    osc2.detune.setValueAtTime(8, now);
+
+    // Layer 3: sine one octave up, quiet — brightness
+    const osc3 = audioCtx.createOscillator();
+    osc3.type = 'sine';
+    osc3.frequency.setValueAtTime(freq * 2, now);
+
+    const g1 = audioCtx.createGain();
+    const g2 = audioCtx.createGain();
+    const g3 = audioCtx.createGain();
+    g1.gain.setValueAtTime(0.3, now);
+    g2.gain.setValueAtTime(0.3, now);
+    g3.gain.setValueAtTime(0.15, now);
+
+    // Master envelope: sharp attack, quick drop, long tail
+    const master = audioCtx.createGain();
+    master.gain.setValueAtTime(0, now);
+    master.gain.linearRampToValueAtTime(0.5, now + 0.008);
+    master.gain.exponentialRampToValueAtTime(0.25, now + 0.1);
+    master.gain.exponentialRampToValueAtTime(0.001, now + 2.5);
+
+    osc1.connect(g1); g1.connect(master);
+    osc2.connect(g2); g2.connect(master);
+    osc3.connect(g3); g3.connect(master);
+    master.connect(audioCtx.destination);
+
+    osc1.start(now); osc1.stop(now + 2.5);
+    osc2.start(now); osc2.stop(now + 2.5);
+    osc3.start(now); osc3.stop(now + 2.5);
+  });
+}
+
+function showBrowserModal() {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(44,40,32,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999; font-family: 'DM Mono', monospace;
+  `;
+
+  const box = document.createElement('div');
+  box.style.cssText = `
+    background: #f5f0e8; border: 1px solid #d6cebc; border-radius: 4px;
+    padding: 2rem 2.5rem; max-width: 340px; text-align: center;
+  `;
+
+  box.innerHTML = `
+    <p style="font-family:'Lora',serif; font-size:1.1rem; font-weight:600; color:#2c2820; margin-bottom:0.8rem;">
+      Browser not supported
+    </p>
+    <p style="font-size:1rem; color:#8c8070; line-height:1.7; margin-bottom:1.5rem;">
+      MIDI keyboard requires <strong style="color:#2c2820;">Chrome</strong> or 
+      <strong style="color:#2c2820;">Firefox</strong> and isn't supported on iOS.<br>
+      You can still tap the note labels on the circle directly.
+    </p>
+    <button onclick="this.closest('div').parentElement.remove()" style="
+      background: transparent; border: 1px solid #d6cebc; color: #8c8070;
+      font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.12em;
+      text-transform: uppercase; padding: 0.4rem 1.2rem; cursor: pointer; border-radius: 2px;
+    ">Got it</button>
+  `;
+
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// --- MIDI ---
+const statusEl = document.getElementById('status');
+const noteDisplay = document.getElementById('note-display');
+
+function onMidiMessage(event) {
+  const [status, note, velocity] = event.data;
+  const isNoteOn = (status & 0xf0) === 0x90 && velocity > 0;
+  if (!isNoteOn) return;
+
+  // Playing a note releases any freeze
+  frozenSeq = -1;
+  hoveredSeq = -1;
+
+  const pc = midiToPC(note);
+  const fifthIdx = PC_TO_FIFTH_IDX[pc];
+  const noteName = FIFTHS[fifthIdx];
+
+  currentPoints().push(fifthIdx);
+  playNote(fifthIdx);
+  noteDisplay.textContent = noteName;
+  addNoteToList(noteName, activeSeq);
+  draw();
+}
+
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess().then((midi) => {
+    statusEl.textContent = 'MIDI connected';
+    statusEl.className = 'connected';
+    function connectInputs() {
+      midi.inputs.forEach(input => { input.onmidimessage = onMidiMessage; });
+    }
+    connectInputs();
+    midi.onstatechange = connectInputs;
+  }).catch(() => {
+    statusEl.textContent = 'MIDI access denied';
+    statusEl.className = 'error';
+  });
+} else {
+  statusEl.textContent = 'Web MIDI not supported in this browser';
+  statusEl.className = 'error';
+  showBrowserModal();
+}
+
+// --- Click on canvas labels ---
+canvas.style.cursor = 'pointer';
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) * (SIZE / rect.width);
+  const y = (e.clientY - rect.top) * (SIZE / rect.height);
+
+  for (let i = 0; i < 12; i++) {
+    const a = angleForIdx(i);
+    const lx = CX + R_LABEL * Math.cos(a);
+    const ly = CY + R_LABEL * Math.sin(a);
+    const dist = Math.sqrt((x - lx) ** 2 + (y - ly) ** 2);
+
+    if (dist < SIZE * 0.07) {
+      const fifthIdx = i;
+      const noteName = FIFTHS[fifthIdx];
+
+      frozenSeq = -1;
+      hoveredSeq = -1;
+
+      currentPoints().push(fifthIdx);
+      playNote(fifthIdx);
+      noteDisplay.textContent = noteName;
+      addNoteToList(noteName, activeSeq);
+      draw();
+      return;
+    }
+  }
+});
+
+window.addEventListener('resize', () => { initCanvas(); draw(); });
+</script>
+</body>
+</html>
