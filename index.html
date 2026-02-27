@@ -173,6 +173,24 @@
     padding: 1.2rem 1rem;
     overflow: hidden;
   }
+  @media (max-width: 600px) {
+  .main {
+    flex-direction: column;
+  }
+
+  .right-panel {
+    width: 100%;
+    height: 180px;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    padding: 0.8rem 1rem;
+  }
+
+  .left-panel {
+    border-right: none;
+    padding: 0.8rem;
+  }
+}
 
   .right-panel h2 {
     font-family: 'Lora', serif;
@@ -771,8 +789,8 @@ function showBrowserModal() {
       Browser not supported
     </p>
     <p style="font-size:1rem; color:#8c8070; line-height:1.7; margin-bottom:1.5rem;">
-      MIDI keyboard requires <strong style="color:#2c2820;">Chrome</strong> or 
-      <strong style="color:#2c2820;">Firefox</strong> and isn't supported on iOS.<br>
+      The MIDI keyboard integration requires <strong style="color:#2c2820;">Chrome</strong> or 
+      <strong style="color:#2c2820;">Firefox</strong> and isn't supported on iOS/iPadOS.<br>
       You can still tap the note labels on the circle directly.
     </p>
     <button onclick="this.closest('div').parentElement.remove()" style="
